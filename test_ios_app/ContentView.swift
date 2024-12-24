@@ -9,6 +9,7 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
     var connectedPeripheral: CBPeripheral?
     var receivedData: String = ""  // Store received data to display
     var isConnected: Bool = false
+    var reconnectingPeripheral: CBPeripheral?
     
     // Define the service and characteristic UUIDs for your device
     let serviceUUID = CBUUID(string: "19b10000-0000-0000-0000-000000000001")
@@ -27,7 +28,6 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
         switch central.state {
         case .poweredOn:
             print("Bluetooth is powered on.")
-            // Now that Bluetooth is on, the app is ready to scan when requested
         case .poweredOff:
             print("Bluetooth is powered off.")
         case .unauthorized:
@@ -67,6 +67,14 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         print("Disconnected from peripheral: \(peripheral.name ?? "Unknown")")
         isConnected = false
+        // Avoid reconnecting if we are already trying to reconnect
+        if let reconnectingPeripheral = self.reconnectingPeripheral, reconnectingPeripheral.identifier == peripheral.identifier {
+            print("Already attempting reconnection for \(peripheral.name ?? "Unknown")")
+            return
+        }
+        
+        // Store the peripheral for potential reconnection
+        reconnectingPeripheral = peripheral
         // Attempt to reconnect if disconnected
         centralManager.connect(peripheral, options: nil)
     }
@@ -149,7 +157,17 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
         centralManager.stopScan()  // Stop scanning when we attempt to connect
         centralManager.connect(peripheral, options: nil)
     }
+    
+    // Disconnect the current peripheral if needed
+    func disconnectCurrentPeripheral() {
+        if let peripheral = connectedPeripheral {
+            centralManager.cancelPeripheralConnection(peripheral)
+            print("Disconnected from peripheral: \(peripheral.name ?? "Unknown")")
+            connectedPeripheral = nil
+        }
+    }
 }
+
 
 struct ContentView: View {
     // State variables to hold data for the three graphs
