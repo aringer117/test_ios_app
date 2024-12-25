@@ -42,7 +42,7 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String : Any], rssi: NSNumber) {
         print("Discovered peripheral: \(peripheral.name ?? "Unknown")")
         // Only add the device with the name you are looking for
-        if peripheral.name == "NiclaSenseME" {
+        if peripheral.name == "TechPolo_Mallet" {
             discoveredPeripherals.append(peripheral)
             connectToPeripheral(peripheral)  // Connect to the discovered peripheral directly
         }
