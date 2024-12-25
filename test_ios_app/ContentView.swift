@@ -26,7 +26,6 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
         switch central.state {
         case .poweredOn:
             print("Bluetooth is powered on.")
-            // Now that Bluetooth is on, the app is ready to scan when requested
         case .poweredOff:
             print("Bluetooth is powered off.")
         case .unauthorized:
@@ -41,7 +40,6 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
     // Handle discovered peripherals
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String : Any], rssi: NSNumber) {
         print("Discovered peripheral: \(peripheral.name ?? "Unknown")")
-        // Only add the device with the name you are looking for
         if peripheral.name == "TechPolo_Mallet" {
             discoveredPeripherals.append(peripheral)
             connectToPeripheral(peripheral)  // Connect to the discovered peripheral directly
@@ -71,7 +69,6 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
         centralManager.connect(peripheral, options: nil)
     }
     
-    // Handle discovered services
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         if let error = error {
             print("Error discovering services: \(error.localizedDescription)")
@@ -79,30 +76,27 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
         }
         for service in peripheral.services ?? [] {
             print("Discovered service: \(service.uuid)")
-            // Once services are discovered, discover characteristics
             peripheral.discoverCharacteristics([accelerometerXCharacteristicUUID, accelerometerYCharacteristicUUID, accelerometerZCharacteristicUUID, forceCharacteristicUUID], for: service)
         }
     }
-    
-    // Handle discovered characteristics
+
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
         if let error = error {
             print("Error discovering characteristics: \(error.localizedDescription)")
             return
         }
-        
+
         for characteristic in service.characteristics ?? [] {
             print("Discovered characteristic: \(characteristic.uuid)")
             if characteristic.uuid == accelerometerXCharacteristicUUID ||
                 characteristic.uuid == accelerometerYCharacteristicUUID ||
                 characteristic.uuid == accelerometerZCharacteristicUUID ||
                 characteristic.uuid == forceCharacteristicUUID {
-                
                 peripheral.setNotifyValue(true, for: characteristic)  // Enable notifications
             }
         }
     }
-    
+
     // Handle received data from peripheral
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
         if let error = error {
@@ -113,16 +107,16 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
         if let value = characteristic.value {
             if characteristic.uuid == accelerometerXCharacteristicUUID {
                 let x = value.withUnsafeBytes { $0.load(as: Float.self) }
-                print("Received X Acceleration: \(x)")
+                receivedData = "X Acceleration: \(x)"
             } else if characteristic.uuid == accelerometerYCharacteristicUUID {
                 let y = value.withUnsafeBytes { $0.load(as: Float.self) }
-                print("Received Y Acceleration: \(y)")
+                receivedData = "Y Acceleration: \(y)"
             } else if characteristic.uuid == accelerometerZCharacteristicUUID {
                 let z = value.withUnsafeBytes { $0.load(as: Float.self) }
-                print("Received Z Acceleration: \(z)")
+                receivedData = "Z Acceleration: \(z)"
             } else if characteristic.uuid == forceCharacteristicUUID {
                 let force = value.withUnsafeBytes { $0.load(as: Float.self) }
-                print("Received Force: \(force)")
+                receivedData = "Force: \(force)"
             }
         }
     }
@@ -145,6 +139,15 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
         print("Connecting to \(peripheral.name ?? "Unknown")...")
         centralManager.stopScan()  // Stop scanning when we attempt to connect
         centralManager.connect(peripheral, options: nil)
+    }
+    
+    // Reset and reconnect to the peripheral
+    func resetAndReconnect() {
+        if let peripheral = connectedPeripheral {
+            centralManager.cancelPeripheralConnection(peripheral)
+            stopScanning()
+            startScanning()  // Restart scanning to reconnect
+        }
     }
 }
 
@@ -173,6 +176,14 @@ struct ContentView: View {
             }
             .buttonStyle(.borderedProminent)
             
+            // Reset BLE and reconnect button
+            Button("Reset BLE & Reconnect") {
+                bluetoothManager.resetAndReconnect()
+                connectionLog.append("Reset BLE and trying to reconnect...")
+            }
+            .buttonStyle(.bordered)
+            .padding(.top)
+            
             // Display log of connection activity
             ScrollView {
                 VStack(alignment: .leading) {
@@ -185,6 +196,11 @@ struct ContentView: View {
                 }
             }
             .padding()
+            
+            // Display received data
+            Text("Received Data: \(bluetoothManager.receivedData)")
+                .font(.body)
+                .padding()
             
             Spacer()
         }
@@ -202,3 +218,4 @@ struct ContentView_Previews: PreviewProvider {
         ContentView()
     }
 }
+
