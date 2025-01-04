@@ -1,7 +1,7 @@
 import SwiftUI
 import CoreBluetooth
+import CloudKit
 
-// BluetoothManager class to handle Bluetooth operations
 class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     var centralManager: CBCentralManager!
     var discoveredPeripherals: [CBPeripheral] = []  // Store discovered peripherals
@@ -16,6 +16,11 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
     let accelerometerZCharacteristicUUID = CBUUID(string: "19b10000-0000-0000-0000-000000000004")
     let forceCharacteristicUUID = CBUUID(string: "19b10000-0000-0000-0000-000000000005")
     
+    var xAcceleration: Float?
+    var yAcceleration: Float?
+    var zAcceleration: Float?
+    var force: Float?
+
     override init() {
         super.init()
         centralManager = CBCentralManager(delegate: self, queue: nil)
@@ -36,64 +41,13 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
             print("Bluetooth is in an unknown state.")
         }
     }
-    
+
     // Handle discovered peripherals
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String : Any], rssi: NSNumber) {
         print("Discovered peripheral: \(peripheral.name ?? "Unknown")")
         if peripheral.name == "TechPolo_Mallet" {
             discoveredPeripherals.append(peripheral)
             connectToPeripheral(peripheral)  // Connect to the discovered peripheral directly
-        }
-    }
-    
-    // Handle successful connection to peripheral
-    func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
-        print("Successfully connected to peripheral: \(peripheral.name ?? "Unknown")")
-        connectedPeripheral = peripheral
-        peripheral.delegate = self
-        peripheral.discoverServices([serviceUUID])  // Discover specific service
-        isConnected = true
-    }
-    
-    // Handle failed connection
-    func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
-        print("Failed to connect to peripheral: \(peripheral.name ?? "Unknown"), error: \(error?.localizedDescription ?? "Unknown error")")
-        isConnected = false
-    }
-    
-    // Handle disconnection
-    func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
-        print("Disconnected from peripheral: \(peripheral.name ?? "Unknown")")
-        isConnected = false
-        // Attempt to reconnect if disconnected
-        centralManager.connect(peripheral, options: nil)
-    }
-    
-    func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
-        if let error = error {
-            print("Error discovering services: \(error.localizedDescription)")
-            return
-        }
-        for service in peripheral.services ?? [] {
-            print("Discovered service: \(service.uuid)")
-            peripheral.discoverCharacteristics([accelerometerXCharacteristicUUID, accelerometerYCharacteristicUUID, accelerometerZCharacteristicUUID, forceCharacteristicUUID], for: service)
-        }
-    }
-
-    func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
-        if let error = error {
-            print("Error discovering characteristics: \(error.localizedDescription)")
-            return
-        }
-
-        for characteristic in service.characteristics ?? [] {
-            print("Discovered characteristic: \(characteristic.uuid)")
-            if characteristic.uuid == accelerometerXCharacteristicUUID ||
-                characteristic.uuid == accelerometerYCharacteristicUUID ||
-                characteristic.uuid == accelerometerZCharacteristicUUID ||
-                characteristic.uuid == forceCharacteristicUUID {
-                peripheral.setNotifyValue(true, for: characteristic)  // Enable notifications
-            }
         }
     }
 
@@ -103,31 +57,112 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
             print("Error reading characteristic: \(error.localizedDescription)")
             return
         }
-        
+
         if let value = characteristic.value {
             if characteristic.uuid == accelerometerXCharacteristicUUID {
-                let x = value.withUnsafeBytes { $0.load(as: Float.self) }
-                receivedData = "X Acceleration: \(x)"
+                xAcceleration = value.withUnsafeBytes { $0.load(as: Float.self) }
+                receivedData = "X Acceleration: \(xAcceleration ?? 0.0)"
             } else if characteristic.uuid == accelerometerYCharacteristicUUID {
-                let y = value.withUnsafeBytes { $0.load(as: Float.self) }
-                receivedData = "Y Acceleration: \(y)"
+                yAcceleration = value.withUnsafeBytes { $0.load(as: Float.self) }
+                receivedData = "Y Acceleration: \(yAcceleration ?? 0.0)"
             } else if characteristic.uuid == accelerometerZCharacteristicUUID {
-                let z = value.withUnsafeBytes { $0.load(as: Float.self) }
-                receivedData = "Z Acceleration: \(z)"
+                zAcceleration = value.withUnsafeBytes { $0.load(as: Float.self) }
+                receivedData = "Z Acceleration: \(zAcceleration ?? 0.0)"
             } else if characteristic.uuid == forceCharacteristicUUID {
-                let force = value.withUnsafeBytes { $0.load(as: Float.self) }
-                receivedData = "Force: \(force)"
+                force = value.withUnsafeBytes { $0.load(as: Float.self) }
+                receivedData = "Force: \(force ?? 0.0)"
             }
         }
     }
+
+    // Function to save data to CloudKit
+    func saveDataToCloud() {
+        // Access the custom container "iCloud.test_bucket"
+        let container = CKContainer(identifier: "iCloud.test_bucket")
+        // Access the public CloudKit database for the custom container
+        let database = container.publicCloudDatabase
+        let record = CKRecord(recordType: "Mallet_Hits")
+        //Fake Data
+        let x: Float = 1.00
+        let y: Float = 4.00
+        let z: Float = 7.00
+        let force: Float = 12.00
+        record["Force"] = force as CKRecordValue
+        //record["IMU_xyz"] = [Double(x), Double(y), Double(z)] as CKRecordValue
+        record["IMU_xyz"] = [
+               Double(x), Double(y), Double(z),
+               Double(x), Double(y), Double(z),
+               Double(x), Double(y), Double(z)
+           ] as CKRecordValue
     
+        // Save the record to CloudKit
+        database.save(record) { savedRecord, error in
+            if let error = error {
+                print("Error saving record to CloudKit: \(error.localizedDescription)")
+            } else {
+                print("Successfully saved record to CloudKit: \(String(describing: savedRecord))")
+            }
+        }
+    }
+
+    
+    // Fetch the last 10 records for the current user
+    func fetchRecentUserRecords(completion: @escaping ([CKRecord]) -> Void) {
+        let container = CKContainer(identifier: "iCloud.test_bucket")
+        let database = container.publicCloudDatabase
+        
+        // Fetch the current user record ID
+        container.fetchUserRecordID { recordID, error in
+            guard let userRecordID = recordID else {
+                print("Error fetching user record ID: \(error?.localizedDescription ?? "Unknown")")
+                completion([])
+                return
+            }
+            
+            // Create a reference to the user record
+            let reference = CKRecord.Reference(recordID: userRecordID, action: .none)
+            
+            // Set up a query with a predicate that filters by the user's ID
+            let userPredicate = NSPredicate(format: "creatorUserRecordID == %@", reference)
+            let query = CKQuery(recordType: "Mallet_Hits", predicate: userPredicate)
+            let sortDescriptor = NSSortDescriptor(key: "___createTime", ascending: false)
+            query.sortDescriptors = [sortDescriptor]
+            
+            let queryOperation = CKQueryOperation(query: query)
+            queryOperation.resultsLimit = 10  // Limit the results to 10 records
+            var fetchedRecords: [CKRecord] = []  // Array to store the fetched records
+            
+            // Use the recordMatchedBlock to handle each fetched record
+            queryOperation.recordMatchedBlock = { (recordID, result) in
+                switch result {
+                case .success(let record):
+                    print("Fetched record: \(record)")
+                    fetchedRecords.append(record)  // Store the fetched record
+                case .failure(let error):
+                    print("Failed to fetch record with ID \(recordID): \(error.localizedDescription)")
+                }
+            }
+            
+            queryOperation.queryCompletionBlock = { cursor, error in
+                            if let error = error {
+                                print("Error fetching records: \(error.localizedDescription)")
+                            }
+                            DispatchQueue.main.async {
+                                completion(fetchedRecords)
+                            }
+                        }
+            
+            // Execute the query operation
+            database.add(queryOperation)
+        }
+    }
     // Start scanning for peripherals
     func startScanning() {
         print("Starting Bluetooth scan...")
         discoveredPeripherals.removeAll()  // Clear the list before scanning
         centralManager.scanForPeripherals(withServices: nil, options: nil)
     }
-    
+
     // Stop scanning for peripherals
     func stopScanning() {
         print("Stopping Bluetooth scan...")
@@ -155,18 +190,27 @@ struct ContentView: View {
     @State private var bluetoothManager = BluetoothManager()
     @State private var isScanning = false
     @State private var connectionLog: [String] = []  // Log of connection activity
+    @State private var records: [CKRecord] = []  // Store the fetched records
+    @State private var isAnimating = false  // Animation flag
+    
+    // Create a basic rotation animation for the mallet image
+    @State private var rotation: Double = 0.0
     
     var body: some View {
         VStack {
-            // Main content (Image, Text, Button)
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
+            Image(systemName: "pencil.circle.fill") // Placeholder for mallet image
+                .resizable()
+                .frame(width: 100, height: 100)
+                .rotationEffect(.degrees(rotation))
+                .animation(.linear(duration: 1).repeatForever(autoreverses: false), value: rotation)
+                .onAppear {
+                    rotation = 360
+                }
+            
             Text("Polo Tech Test App")
                 .font(.title)
                 .foregroundColor(.primary)
             
-            // Connect to Bluetooth button
             Button("Connect to Arduino via BT") {
                 if !isScanning {
                     bluetoothManager.startScanning()
@@ -176,7 +220,6 @@ struct ContentView: View {
             }
             .buttonStyle(.borderedProminent)
             
-            // Reset BLE and reconnect button
             Button("Reset BLE & Reconnect") {
                 bluetoothManager.resetAndReconnect()
                 connectionLog.append("Reset BLE and trying to reconnect...")
@@ -184,24 +227,38 @@ struct ContentView: View {
             .buttonStyle(.bordered)
             .padding(.top)
             
-            // Display log of connection activity
+            Button("Save Data to CloudKit") {
+                bluetoothManager.saveDataToCloud()  // Save Bluetooth data to CloudKit
+                connectionLog.append("Saving data to CloudKit...")
+            }
+            .buttonStyle(.bordered)
+            .padding(.top)
+            
+            Button("Fetch Recent Records") {
+                bluetoothManager.fetchRecentUserRecords { fetchedRecords in
+                    self.records = fetchedRecords
+                    connectionLog.append("Fetched recent records from CloudKit...")
+                }
+            }
+            .buttonStyle(.bordered)
+            .padding(.top)
+            
             ScrollView {
                 VStack(alignment: .leading) {
-                    ForEach(connectionLog, id: \.self) { log in
-                        Text(log)
-                            .font(.body)
-                            .foregroundColor(.gray)
-                            .padding(5)
+                    ForEach(records, id: \.recordID) { record in
+                        VStack(alignment: .leading) {
+                            Text("Mallet Hit Record")
+                                .font(.headline)
+                            Text("Force: \(record["Force"] as? Float ?? 0.0) N")
+                            Text("IMU Data: \(record["IMU_xyz"] as? [Double] ?? [])")
+                            Divider()
+                        }
+                        .padding(.vertical)
                     }
                 }
             }
             .padding()
-            
-            // Display received data
-            Text("Received Data: \(bluetoothManager.receivedData)")
-                .font(.body)
-                .padding()
-            
+
             Spacer()
         }
         .onAppear {
