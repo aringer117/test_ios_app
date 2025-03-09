@@ -10,11 +10,11 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
     var isConnected: Bool = false
     
     // Define the service and characteristic UUIDs for your device
-    let serviceUUID = CBUUID(string: "19b10000-0000-0000-0000-000000000001")
-    let accelerometerXCharacteristicUUID = CBUUID(string: "19b10000-0000-0000-0000-000000000002")
-    let accelerometerYCharacteristicUUID = CBUUID(string: "19b10000-0000-0000-0000-000000000003")
-    let accelerometerZCharacteristicUUID = CBUUID(string: "19b10000-0000-0000-0000-000000000004")
-    let forceCharacteristicUUID = CBUUID(string: "19b10000-0000-0000-0000-000000000005")
+    let serviceUUID = CBUUID(string: "19b10000-180D-537e-4f6c-d104768a1214")
+    let accelerometerXCharacteristicUUID = CBUUID(string: "19b10000-1006-537e-4f6c-d104768a1214")
+    let accelerometerYCharacteristicUUID = CBUUID(string: "19b10000-1007-537e-4f6c-d104768a1214")
+    let accelerometerZCharacteristicUUID = CBUUID(string: "19b10000-1008-537e-4f6c-d104768a1214")
+    let forceCharacteristicUUID = CBUUID(string: "19b10000-1009-537e-4f6c-d104768a1214")
     
     var xAcceleration: Float?
     var yAcceleration: Float?
@@ -44,8 +44,8 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
 
     // Handle discovered peripherals
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String : Any], rssi: NSNumber) {
-        print("Discovered peripheral: \(peripheral.name ?? "Unknown")")
-        if peripheral.name == "TechPolo_Mallet" {
+        print("Discovered peripheral: \(peripheral.identifier.uuidString ?? "Unknown") \(peripheral.name)")
+        if peripheral.identifier.uuidString == "36942633-E957-1222-ABC6-DCEA49C770E4" {
             discoveredPeripherals.append(peripheral)
             connectToPeripheral(peripheral)  // Connect to the discovered peripheral directly
         }
@@ -174,6 +174,7 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
         print("Connecting to \(peripheral.name ?? "Unknown")...")
         centralManager.stopScan()  // Stop scanning when we attempt to connect
         centralManager.connect(peripheral, options: nil)
+        print("Connected!")
     }
     
     // Reset and reconnect to the peripheral
