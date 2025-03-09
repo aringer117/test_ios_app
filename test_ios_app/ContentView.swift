@@ -10,12 +10,18 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
     var isConnected: Bool = false
     
     // Define the service and characteristic UUIDs for your device
-    let serviceUUID = CBUUID(string: "19b10000-180D-537e-4f6c-d104768a1214")
-    let accelerometerXCharacteristicUUID = CBUUID(string: "19b10000-1006-537e-4f6c-d104768a1214")
-    let accelerometerYCharacteristicUUID = CBUUID(string: "19b10000-1007-537e-4f6c-d104768a1214")
-    let accelerometerZCharacteristicUUID = CBUUID(string: "19b10000-1008-537e-4f6c-d104768a1214")
-    let forceCharacteristicUUID = CBUUID(string: "19b10000-1009-537e-4f6c-d104768a1214")
-    
+    let serviceUUID                          = CBUUID(string: "36942633-E957-1222-ABC6-DCEA49C770E4")
+    let accelerometerXCharacteristicUUID     = CBUUID(string: "6E400007-B5A3-F393-E0A9-E50E24DCCA9E")
+    let accelerometerYCharacteristicUUID     = CBUUID(string: "6E400008-B5A3-F393-E0A9-E50E24DCCA9E")
+    let accelerometerZCharacteristicUUID     = CBUUID(string: "6E400009-B5A3-F393-E0A9-E50E24DCCA9E")
+    let forceCharacteristicUUID              = CBUUID(string: "6E400010-B5A3-F393-E0A9-E50E24DCCA9E")
+    let batteryPercentageCharacteristicUUID  = CBUUID(string:"6E400002-B5A3-F393-E0A9-E50E24DCCA9E")
+    let batteryVoltageCharacteristicUUID     = CBUUID(string:"6E400003-B5A3-F393-E0A9-E50E24DCCA9E")
+    let batteryChargeLevelCharacteristicUUID = CBUUID(string:"6E400004-B5A3-F393-E0A9-E50E24DCCA9E")
+    let runsOnBatteryCharacteristicUUID      = CBUUID(string:"6E400005-B5A3-F393-E0A9-E50E24DCCA9E")
+    let isChargingCharacteristicUUID         = CBUUID(string:"6E400006-B5A3-F393-E0A9-E50E24DCCA9E")
+
+   
     var xAcceleration: Float?
     var yAcceleration: Float?
     var zAcceleration: Float?
@@ -50,6 +56,53 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
             connectToPeripheral(peripheral)  // Connect to the discovered peripheral directly
         }
     }
+    
+    // Discover services after connecting
+    func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        print("Connected to \(peripheral.name ?? "Unknown")")
+        peripheral.delegate = self
+        peripheral.discoverServices([serviceUUID])
+    }
+
+    // Discover characteristics after discovering services
+    func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
+        print("Trying to find services?")
+        if let error = error {
+            print("Error discovering services: \(error.localizedDescription)")
+            return
+        }
+        
+        guard let services = peripheral.services else { return }
+        for service in services {
+            if service.uuid == serviceUUID {
+                print("Discovered service: \(service.uuid)")
+                peripheral.discoverCharacteristics([accelerometerXCharacteristicUUID, accelerometerYCharacteristicUUID, accelerometerZCharacteristicUUID, forceCharacteristicUUID], for: service)
+            }
+        }
+    }
+    // Subscribe to characteristic notifications
+    func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
+        if let error = error {
+            print("Error discovering characteristics: \(error.localizedDescription)")
+            return
+        }
+        
+        guard let characteristics = service.characteristics else { return }
+        for characteristic in characteristics {
+            print("Trying to find charateristics")
+            if [accelerometerXCharacteristicUUID, accelerometerYCharacteristicUUID, accelerometerZCharacteristicUUID, forceCharacteristicUUID].contains(characteristic.uuid) {
+                print("Subscribing to characteristic: \(characteristic.uuid)")
+                peripheral.setNotifyValue(true, for: characteristic)
+                peripheral.readValue(for: characteristic) // Force read value
+            }
+        }
+    }
+    
+
+        
+    
+    
+    
 
     // Handle received data from peripheral
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
