@@ -10,16 +10,17 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
     var isConnected: Bool = false
     
     // Define the service and characteristic UUIDs for your device
-    let serviceUUID                          = CBUUID(string: "36942633-E957-1222-ABC6-DCEA49C770E4")
-    let accelerometerXCharacteristicUUID     = CBUUID(string: "6E400007-B5A3-F393-E0A9-E50E24DCCA9E")
-    let accelerometerYCharacteristicUUID     = CBUUID(string: "6E400008-B5A3-F393-E0A9-E50E24DCCA9E")
-    let accelerometerZCharacteristicUUID     = CBUUID(string: "6E400009-B5A3-F393-E0A9-E50E24DCCA9E")
-    let forceCharacteristicUUID              = CBUUID(string: "6E400010-B5A3-F393-E0A9-E50E24DCCA9E")
-    let batteryPercentageCharacteristicUUID  = CBUUID(string:"6E400002-B5A3-F393-E0A9-E50E24DCCA9E")
-    let batteryVoltageCharacteristicUUID     = CBUUID(string:"6E400003-B5A3-F393-E0A9-E50E24DCCA9E")
-    let batteryChargeLevelCharacteristicUUID = CBUUID(string:"6E400004-B5A3-F393-E0A9-E50E24DCCA9E")
-    let runsOnBatteryCharacteristicUUID      = CBUUID(string:"6E400005-B5A3-F393-E0A9-E50E24DCCA9E")
-    let isChargingCharacteristicUUID         = CBUUID(string:"6E400006-B5A3-F393-E0A9-E50E24DCCA9E")
+    let setUUID = CBUUID(string: "02D958BD-11B0-D9A1-A97A-95C9B3E21341")
+    let serviceUUID                          = CBUUID(string: "495466aa-3694-4781-8a49-7141290d95b1")
+    let accelerometerXCharacteristicUUID     = CBUUID(string: "eba3df49-861e-4f80-9def-f7ea68ef39d7")
+    let accelerometerYCharacteristicUUID     = CBUUID(string: "9b3ed2d6-554e-4e23-898b-e15eb1f72dec")
+    let accelerometerZCharacteristicUUID     = CBUUID(string: "621e4bf0-4906-42b7-8111-6d59e4b6e5bd")
+    let forceCharacteristicUUID              = CBUUID(string: "8e5416d8-14c0-4a7e-9304-0128d912d500")
+    //let batteryPercentageCharacteristicUUID  = CBUUID(string:"6E400002-B5A3-F393-E0A9-E50E24DCCA9E")
+    //let batteryVoltageCharacteristicUUID     = CBUUID(string:"6E400003-B5A3-F393-E0A9-E50E24DCCA9E")
+    //let batteryChargeLevelCharacteristicUUID = CBUUID(string:"6E400004-B5A3-F393-E0A9-E50E24DCCA9E")
+    //let runsOnBatteryCharacteristicUUID      = CBUUID(string:"6E400005-B5A3-F393-E0A9-E50E24DCCA9E")
+    //let isChargingCharacteristicUUID         = CBUUID(string:"6E400006-B5A3-F393-E0A9-E50E24DCCA9E")
 
    
     var xAcceleration: Float?
@@ -51,7 +52,7 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
     // Handle discovered peripherals
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String : Any], rssi: NSNumber) {
         print("Discovered peripheral: \(peripheral.identifier.uuidString ?? "Unknown") \(peripheral.name)")
-        if peripheral.identifier.uuidString == "36942633-E957-1222-ABC6-DCEA49C770E4" {
+        if peripheral.identifier.uuidString == "02D958BD-11B0-D9A1-A97A-95C9B3E21341" {
             discoveredPeripherals.append(peripheral)
             connectToPeripheral(peripheral)  // Connect to the discovered peripheral directly
         }
@@ -60,23 +61,35 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
     // Discover services after connecting
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         print("Connected to \(peripheral.name ?? "Unknown")")
+        connectedPeripheral = peripheral
         peripheral.delegate = self
+        print("Requesting service discovery for \(peripheral.name ?? "Unknown")")
         peripheral.discoverServices([serviceUUID])
+        
     }
 
     // Discover characteristics after discovering services
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
-        print("Trying to find services?")
+        print("🔍 Checking discovered services for \(peripheral.name ?? "Unknown")")
+        
         if let error = error {
-            print("Error discovering services: \(error.localizedDescription)")
+            print("❌ Error discovering services: \(error.localizedDescription)")
             return
         }
         
-        guard let services = peripheral.services else { return }
+        guard let services = peripheral.services, !services.isEmpty else {
+            print("⚠️ No services found on \(peripheral.name ?? "Unknown")")
+            return
+        }
+
+        print("✅ Found \(services.count) services on \(peripheral.name ?? "Unknown")")
+
         for service in services {
+            print("📡 Discovered service: \(service.uuid)")
+
             if service.uuid == serviceUUID {
-                print("Discovered service: \(service.uuid)")
-                peripheral.discoverCharacteristics([accelerometerXCharacteristicUUID, accelerometerYCharacteristicUUID, accelerometerZCharacteristicUUID, forceCharacteristicUUID], for: service)
+                print("🎯 Target service found, discovering characteristics...")
+                peripheral.discoverCharacteristics(nil, for: service)  // Discover all characteristics
             }
         }
     }
@@ -97,6 +110,21 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
             }
         }
     }
+    func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        print("⚠️ Disconnected from \(peripheral.name ?? "Unknown")")
+
+        if let error = error {
+            print("❌ Disconnection error: \(error.localizedDescription)")
+        } else {
+            print("ℹ️ Peripheral disconnected normally.")
+        }
+
+        // Automatically try to reconnect
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            print("🔄 Attempting to reconnect...")
+            self.centralManager.connect(peripheral, options: nil)
+        }
+    }
     
 
         
@@ -110,7 +138,8 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
             print("Error reading characteristic: \(error.localizedDescription)")
             return
         }
-
+        
+        print("Accel Data received!")
         if let value = characteristic.value {
             if characteristic.uuid == accelerometerXCharacteristicUUID {
                 xAcceleration = value.withUnsafeBytes { $0.load(as: Float.self) }
@@ -125,6 +154,7 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
                 force = value.withUnsafeBytes { $0.load(as: Float.self) }
                 receivedData = "Force: \(force ?? 0.0)"
             }
+            print(receivedData)
         }
     }
 
