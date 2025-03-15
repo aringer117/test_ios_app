@@ -155,6 +155,7 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
                 receivedData = "Force: \(force ?? 0.0)"
             }
             print(receivedData)
+            saveDataToCloud()
         }
     }
 
@@ -166,9 +167,9 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
         let database = container.publicCloudDatabase
         let record = CKRecord(recordType: "Mallet_Hits")
         //Fake Data
-        let x: Float = 1.00
-        let y: Float = 4.00
-        let z: Float = 7.00
+        let x: Float = 2.00
+        let y: Float = 3.00
+        let z: Float = 4.00
         let force: Float = 12.00
         record["Force"] = force as CKRecordValue
         //record["IMU_xyz"] = [Double(x), Double(y), Double(z)] as CKRecordValue
