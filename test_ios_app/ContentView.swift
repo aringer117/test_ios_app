@@ -27,6 +27,18 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
     var yAcceleration: Float?
     var zAcceleration: Float?
     var force: Float?
+    
+    // Store the most recent complete set of values
+    var lastSavedX: Float?
+    var lastSavedY: Float?
+    var lastSavedZ: Float?
+    var lastSavedForce: Float?
+
+    // Flags to track new updates
+    var newX = false
+    var newY = false
+    var newZ = false
+    var newForce = false
 
     override init() {
         super.init()
@@ -135,42 +147,72 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
     // Handle received data from peripheral
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
         if let error = error {
-            print("Error reading characteristic: \(error.localizedDescription)")
-            return
-        }
-        
-        print("Accel Data received!")
-        if let value = characteristic.value {
-            if characteristic.uuid == accelerometerXCharacteristicUUID {
-                xAcceleration = value.withUnsafeBytes { $0.load(as: Float.self) }
-                receivedData = "X Acceleration: \(xAcceleration ?? 0.0)"
-            } else if characteristic.uuid == accelerometerYCharacteristicUUID {
-                yAcceleration = value.withUnsafeBytes { $0.load(as: Float.self) }
-                receivedData = "Y Acceleration: \(yAcceleration ?? 0.0)"
-            } else if characteristic.uuid == accelerometerZCharacteristicUUID {
-                zAcceleration = value.withUnsafeBytes { $0.load(as: Float.self) }
-                receivedData = "Z Acceleration: \(zAcceleration ?? 0.0)"
-            } else if characteristic.uuid == forceCharacteristicUUID {
-                force = value.withUnsafeBytes { $0.load(as: Float.self) }
-                receivedData = "Force: \(force ?? 0.0)"
+                print("Error reading characteristic: \(error.localizedDescription)")
+                return
             }
-            print(receivedData)
-            saveDataToCloud()
-        }
+
+            print("Accel Data received!")
+            
+            if let value = characteristic.value {
+                var receivedData = ""
+
+                if characteristic.uuid == accelerometerXCharacteristicUUID {
+                    xAcceleration = value.withUnsafeBytes { $0.load(as: Float.self) }
+                    newX = true
+                    receivedData = "X Acceleration: \(xAcceleration ?? 0.0)"
+                } else if characteristic.uuid == accelerometerYCharacteristicUUID {
+                    yAcceleration = value.withUnsafeBytes { $0.load(as: Float.self) }
+                    newY = true
+                    receivedData = "Y Acceleration: \(yAcceleration ?? 0.0)"
+                } else if characteristic.uuid == accelerometerZCharacteristicUUID {
+                    zAcceleration = value.withUnsafeBytes { $0.load(as: Float.self) }
+                    newZ = true
+                    receivedData = "Z Acceleration: \(zAcceleration ?? 0.0)"
+                } else if characteristic.uuid == forceCharacteristicUUID {
+                    force = value.withUnsafeBytes { $0.load(as: Float.self) }
+                    newForce = true
+                    receivedData = "Force: \(force ?? 0.0)"
+                }
+
+                print(receivedData)
+
+                // Check if we have a full new set of data
+                if newX, newY, newZ, newForce,
+                   let x = xAcceleration, let y = yAcceleration, let z = zAcceleration, let f = force {
+                    
+                    // Ensure the new set is different from the last saved one
+                    if x != lastSavedX || y != lastSavedY || z != lastSavedZ || f != lastSavedForce {
+                        saveDataToCloud(x: x, y: y, z: z, force: f)
+
+                        // Store this set as the last saved one
+                        lastSavedX = x
+                        lastSavedY = y
+                        lastSavedZ = z
+                        lastSavedForce = f
+
+                        print("Saved new full data set to CloudKit.")
+
+                    } else {
+                        print("Duplicate data detected. Skipping save to CloudKit.")
+                    }
+
+                    // Reset flags to wait for the next full set
+                    newX = false
+                    newY = false
+                    newZ = false
+                    newForce = false
+                }
+            }
     }
 
     // Function to save data to CloudKit
-    func saveDataToCloud() {
+    func saveDataToCloud(x: Float, y: Float, z: Float, force: Float) {
         // Access the custom container "iCloud.test_bucket"
         let container = CKContainer(identifier: "iCloud.test_bucket")
         // Access the public CloudKit database for the custom container
         let database = container.publicCloudDatabase
         let record = CKRecord(recordType: "Mallet_Hits")
-        //Fake Data
-        let x: Float = 2.00
-        let y: Float = 3.00
-        let z: Float = 4.00
-        let force: Float = 12.00
+      
         record["Force"] = force as CKRecordValue
         //record["IMU_xyz"] = [Double(x), Double(y), Double(z)] as CKRecordValue
         record["IMU_xyz"] = [
@@ -185,6 +227,7 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
                 print("Error saving record to CloudKit: \(error.localizedDescription)")
             } else {
                 print("Successfully saved record to CloudKit: \(String(describing: savedRecord))")
+                
             }
         }
     }
@@ -313,7 +356,7 @@ struct ContentView: View {
             .padding(.top)
             
             Button("Save Data to CloudKit") {
-                bluetoothManager.saveDataToCloud()  // Save Bluetooth data to CloudKit
+                bluetoothManager.saveDataToCloud(x:42.0,y:42.0,z:42.0,force:100.0)  // Save Bluetooth data to CloudKit
                 connectionLog.append("Saving data to CloudKit...")
             }
             .buttonStyle(.bordered)
